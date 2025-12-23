@@ -5,7 +5,14 @@
 #include <TinyGPS++.h>
 
 //20251222
-#define FIRMWARE_VERSION 1.2
+//Band Hopping attempt for 15 & 10 meters
+#define FIRMWARE_VERSION 1.3
+
+//ERROR CODES
+// TX RED ERROR
+// GPS ERROR            5 TIMES
+// SI535I ERROR         3 TIMES
+// DATETIME SYNC ERROR 10 TIMES
 
 //******************************************************************
 //                      WSPR configuration
@@ -25,15 +32,15 @@
 // #define WSPR_DEFAULT_FREQ       10140200ULL  // 10.1402 MHz - 30m
 // #define WSPR_DEFAULT_FREQ       14097100ULL  // 14.0971 MHz - 20m
 // #define WSPR_DEFAULT_FREQ       18106100ULL  // 18.1061 MHz - 17m
-#define WSPR_DEFAULT_FREQ       21096100ULL  // 21.0961 MHz - 15m
+// #define WSPR_DEFAULT_FREQ       21096100ULL  // 21.0961 MHz - 15m
 // #define WSPR_DEFAULT_FREQ       24926100ULL  // 24.9261 MHz - 12m
 // #define WSPR_DEFAULT_FREQ       28126100ULL  // 28.1261 MHz - 10m
 // #define WSPR_DEFAULT_FREQ       50294500ULL  // 50.2945 MHz - 6m
 // #define WSPR_DEFAULT_FREQ       70092500ULL  // 70.0925 MHz - 4m
 // #define WSPR_DEFAULT_FREQ       144490500ULL // 144.4905 MHz - 2m
 
-//#define WSPR_DEFAULT_FREQ_15       21096100ULL  // 21.0961 MHz - 15m
-//#define WSPR_DEFAULT_FREQ_28       28126100ULL  // 28.1261 MHz - 10m
+#define WSPR_DEFAULT_FREQ_15       21096100ULL  // 21.0961 MHz - 15m
+#define WSPR_DEFAULT_FREQ_28       28126100ULL  // 28.1261 MHz - 10m
 
 // WSPR message parameters
 #define WSPR_CALL                 "VU3GWN"
@@ -43,6 +50,7 @@
 //                      Hardware defines
 //******************************************************************
 #define TX_LED_PIN                 8
+#define GPS_STATUS_LED_PIN         9
 #define POWER_ON_LED_PIN           10
 
 #define SI5351_CAL_FACTOR          2000
@@ -52,11 +60,18 @@
 #define GPS_TX_PIN                 3
 #define GPS_BAUDRATE               9600
 #define GPS_SERIAL_READ_DURATION   1200
-#define GPS_STATUS_LED_PIN         9
+
 #define GPS_INIT_MAX_TIME          5000
 #define GPS_INIT_DELAY             500
-#define GPS_SYNC_ATTEMPTS          10
+#define GPS_SYNC_ATTEMPTS          20
 #define GPS_SYNC_DELAY             10000
+
+//******************************************************************
+//                      TX Delay defines
+//******************************************************************
+
+#define TX_DELAYLOOPS 3
+#define TX_DELAY 2000
 
 //******************************************************************
 //                      Global variables
@@ -64,6 +79,7 @@
 uint8_t tx_buffer[WSPR_MESSAGE_BUFFER_SIZE];
 Si5351 si5351(SI5351_I2C_ADDRESS);
 uint64_t transmissionFrequency;
+int whichBand = 15 ;
 
 void(* resetHardware) (void) = 0;
 
@@ -80,6 +96,7 @@ void setTransmissionFrequency();
 void synchronizeDateTime(TinyGPSPlus& gpsDataObj);
 void transmitWSPRMessage();
 bool trySyncGPSData(SoftwareSerial& gpsSerial, TinyGPSPlus& gpsDataObj);
+void PowerLEDBlink(int);
 
 //******************************************************************
 //                      Function definitions
@@ -95,14 +112,32 @@ void encodeWSPRMessage(const TinyGPSPlus& gpsDataObj)
     jtencode.wspr_encode(WSPR_CALL, qthLocator, WSPR_DBM, tx_buffer);
 }
 
-void errorLEDIndicationAndReboot()
+void PowerLEDBlink(int nTimes)
+{
+    return ;
+    
+    digitalWrite(POWER_ON_LED_PIN, LOW);
+    delay(500);   
+    
+    for (uint8_t i{0}; i < nTimes; ++i) {
+        digitalWrite(POWER_ON_LED_PIN, HIGH);
+        delay(500);
+        digitalWrite(POWER_ON_LED_PIN, LOW);
+        delay(500);
+    }
+
+    digitalWrite(POWER_ON_LED_PIN, HIGH);
+    delay(500);
+}
+
+void errorLEDIndicationAndReboot(int nTimes = 3)
 {
     // Turn off all the green LEDs (GPS, ON)
     digitalWrite(POWER_ON_LED_PIN, LOW);
     digitalWrite(GPS_STATUS_LED_PIN, LOW);
 
-    // Flash the red LED (TX) three times
-    for (uint8_t i{0}; i < 3; ++i) {
+    // Flash the red LED (TX) ten times
+    for (uint8_t i{0}; i < nTimes; ++i) {
         digitalWrite(TX_LED_PIN, HIGH);
         delay(500);
         digitalWrite(TX_LED_PIN, LOW);
@@ -121,7 +156,7 @@ void initializeGPSSerialConnection(SoftwareSerial& gpsSerial)
         delay(GPS_INIT_DELAY);
 
     if (gpsSerial.available() == false)
-        errorLEDIndicationAndReboot();
+        errorLEDIndicationAndReboot(5);
 }
 
 void initializeLEDs()
@@ -142,7 +177,7 @@ void initializeSI5351()
         // Set CLK0 as TX OUT
         si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_8MA);
     else
-        errorLEDIndicationAndReboot();
+        errorLEDIndicationAndReboot(3);
 }
 
 void setQTHLocator(const TinyGPSPlus& gpsDataObj, char qthLocator[]) {
@@ -156,13 +191,6 @@ void setQTHLocator(const TinyGPSPlus& gpsDataObj, char qthLocator[]) {
     qthLocator[3] = '0' + (uint8_t)(latitude) % 10;
 
     qthLocator[4] = '\0';
-}
-
-void setTransmissionFrequency()
-{
-    // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
-    // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
-    transmissionFrequency = (WSPR_DEFAULT_FREQ + random(-100, 101)) * 100ULL;
 }
 
 void synchronizeDateTime(TinyGPSPlus& gpsDataObj)
@@ -181,7 +209,7 @@ void synchronizeDateTime(TinyGPSPlus& gpsDataObj)
     }
 
     if (dataSynchronized == false)
-        errorLEDIndicationAndReboot();
+        errorLEDIndicationAndReboot(10);
 }
 
 void transmitWSPRMessage()
@@ -222,6 +250,13 @@ bool trySyncGPSData(SoftwareSerial& gpsSerial, TinyGPSPlus& gpsDataObj)
     return false; 
 }
 
+void setTransmissionFrequency()
+{
+    // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
+    // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
+    transmissionFrequency = (WSPR_DEFAULT_FREQ_15 + random(-100, 101)) * 100ULL;
+}
+
 //******************************************************************
 //                      Main firmware code
 //******************************************************************
@@ -243,10 +278,13 @@ void setup()
     setTransmissionFrequency();
 }
 
+
+
 void loop()
 {
+  
     // Transmission of a WSPR message every even minute (00:00, 00:02, 00:04, ...)
-    if(second() == 0 && minute() % 2 == 0)
+    if(whichBand == 15 && second() == 0 && minute() % 2 == 0)
     {
         transmitWSPRMessage();
         
@@ -255,6 +293,34 @@ void loop()
         synchronizeDateTime(gpsDataObj);
         
         // Set a new, random transmission frequency
-        setTransmissionFrequency();
+        // setTransmissionFrequency();
+        // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
+        // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
+        transmissionFrequency = (WSPR_DEFAULT_FREQ_28 + random(-100, 101)) * 100ULL;
+        
+        //next Band to be hopped to
+        whichBand = 28 ;
     }
+    
+    // Transmission of a WSPR message every even minute (00:00, 00:02, 00:04, ...)
+    
+    if(whichBand == 28 && second() == 0 && minute() % 2 == 0)
+    {
+        transmitWSPRMessage();
+                
+        // Set a new, random transmission frequency
+        // setTransmissionFrequency();
+        // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
+        // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
+        transmissionFrequency = (WSPR_DEFAULT_FREQ_15 + random(-100, 101)) * 100ULL;
+
+        //next Band to be hopped to
+        whichBand = 15 ;
+    }
+
+    for(int i; i < TX_DELAYLOOPS; ++i)
+    {
+        delay(TX_DELAY) ;
+    }
+   
 }
