@@ -70,7 +70,7 @@
 //                      TX Delay defines
 //******************************************************************
 
-#define TX_DELAYLOOPS 3
+#define TX_DELAYLOOPS 1
 #define TX_DELAY 2000
 
 //******************************************************************
@@ -278,7 +278,24 @@ void setup()
     setTransmissionFrequency();
 }
 
-
+void transmitOnBand(uint64_t txFrequency)
+{
+    // Transmission of a WSPR message every even minute (00:00, 00:02, 00:04, ...)
+    if(second() == 0 && minute() % 2 == 0)
+    {
+        transmitWSPRMessage();
+        
+        // Time synchronization based on current GPS data for a new transmission cycle
+        TinyGPSPlus gpsDataObj;
+        synchronizeDateTime(gpsDataObj);
+        
+        // Set a new, random transmission frequency
+        // setTransmissionFrequency();
+        // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
+        // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
+        transmissionFrequency = (txFrequency + random(-100, 101)) * 100ULL;
+    }
+}
 
 void loop()
 {
@@ -324,3 +341,22 @@ void loop()
     }
    
 }
+
+
+/*
+ * 
+ * 
+void loop_UNUSED()
+{
+    static uint8_t slot = 0; // 0–29
+
+    if (slot < 15)
+        transmitOnBand(WSPR_DEFAULT_FREQ_28);
+    else
+        transmitOnBand(WSPR_DEFAULT_FREQ_15);
+
+    slot = (slot + 1) % 30;
+
+    delay(TX_DELAY) ;
+}
+*/
