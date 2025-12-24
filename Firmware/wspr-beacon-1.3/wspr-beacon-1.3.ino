@@ -278,24 +278,6 @@ void setup()
     setTransmissionFrequency();
 }
 
-void transmitOnBand(uint64_t txFrequency)
-{
-    // Transmission of a WSPR message every even minute (00:00, 00:02, 00:04, ...)
-    if(second() == 0 && minute() % 2 == 0)
-    {
-        transmitWSPRMessage();
-        
-        // Time synchronization based on current GPS data for a new transmission cycle
-        TinyGPSPlus gpsDataObj;
-        synchronizeDateTime(gpsDataObj);
-        
-        // Set a new, random transmission frequency
-        // setTransmissionFrequency();
-        // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
-        // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
-        transmissionFrequency = (txFrequency + random(-100, 101)) * 100ULL;
-    }
-}
 
 void loop()
 {
@@ -303,18 +285,19 @@ void loop()
     // Transmission of a WSPR message every even minute (00:00, 00:02, 00:04, ...)
     if(whichBand == 15 && second() == 0 && minute() % 2 == 0)
     {
+
+        // Set a new, random transmission frequency
+        // setTransmissionFrequency();
+        // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
+        // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
+        transmissionFrequency = (WSPR_DEFAULT_FREQ_15 + random(-100, 101)) * 100ULL;
+        
         transmitWSPRMessage();
         
         // Time synchronization based on current GPS data for a new transmission cycle
         TinyGPSPlus gpsDataObj;
         synchronizeDateTime(gpsDataObj);
-        
-        // Set a new, random transmission frequency
-        // setTransmissionFrequency();
-        // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
-        // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
-        transmissionFrequency = (WSPR_DEFAULT_FREQ_28 + random(-100, 101)) * 100ULL;
-        
+                
         //next Band to be hopped to
         whichBand = 28 ;
     }
@@ -323,23 +306,22 @@ void loop()
     
     if(whichBand == 28 && second() == 0 && minute() % 2 == 0)
     {
-        transmitWSPRMessage();
-                
         // Set a new, random transmission frequency
         // setTransmissionFrequency();
         // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
         // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
-        transmissionFrequency = (WSPR_DEFAULT_FREQ_15 + random(-100, 101)) * 100ULL;
-
+        transmissionFrequency = (WSPR_DEFAULT_FREQ_28 + random(-100, 101)) * 100ULL;
+        
+        transmitWSPRMessage();
+        
+        // Time synchronization based on current GPS data for a new transmission cycle
+        TinyGPSPlus gpsDataObj;
+        synchronizeDateTime(gpsDataObj);
+        
         //next Band to be hopped to
         whichBand = 15 ;
     }
 
-    for(int i; i < TX_DELAYLOOPS; ++i)
-    {
-        delay(TX_DELAY) ;
-    }
-   
 }
 
 
@@ -358,5 +340,25 @@ void loop_UNUSED()
     slot = (slot + 1) % 30;
 
     delay(TX_DELAY) ;
+}
+
+
+void transmitOnBand(uint64_t txFrequency)
+{
+    // Transmission of a WSPR message every even minute (00:00, 00:02, 00:04, ...)
+    if(second() == 0 && minute() % 2 == 0)
+    {
+        transmitWSPRMessage();
+        
+        // Time synchronization based on current GPS data for a new transmission cycle
+        TinyGPSPlus gpsDataObj;
+        synchronizeDateTime(gpsDataObj);
+        
+        // Set a new, random transmission frequency
+        // setTransmissionFrequency();
+        // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
+        // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
+        transmissionFrequency = (txFrequency + random(-100, 101)) * 100ULL;
+    }
 }
 */

@@ -37,7 +37,8 @@
 
 // WSPR message parameters
 #define WSPR_CALL                 "VU3GWN"
-#define WSPR_DBM                   23
+//#define WSPR_DBM                   23
+#define WSPR_DBM                   24
 
 //******************************************************************
 //                      Hardware defines
