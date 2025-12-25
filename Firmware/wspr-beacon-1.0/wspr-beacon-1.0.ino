@@ -32,7 +32,7 @@
 
 // WSPR message parameters
 #define WSPR_CALL                 "VU3GWN"
-#define WSPR_DBM                   26
+#define WSPR_DBM                   24
 
 char WSPR_QTH_LOCATOR[5];
 
@@ -65,7 +65,7 @@ Si5351 si5351(SI5351_I2C_ADDRESS);
 
 void(* resetHardware) (void) = 0;
 
-#define TX_DELAY 30000
+#define TX_DELAY 500
 
 //******************************************************************
 //                      Function Prototypes

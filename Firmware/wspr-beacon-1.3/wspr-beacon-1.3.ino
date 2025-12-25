@@ -44,7 +44,23 @@
 
 // WSPR message parameters
 #define WSPR_CALL                 "VU3GWN"
-#define WSPR_DBM                   23
+#define WSPR_DBM                   22
+
+/*
+ * 
+20 dBm  0.1000 W
+21 dBm  0.1259 W
+22 dBm  0.1585 W
+23 dBm  0.1995 W
+24 dBm  0.2512 W
+25 dBm  0.3165 W
+26 dBm  0.3981 W
+27 dBm  0.5012 W
+28 dBm  0.6310 W
+29 dBm  0.7943 W
+30 dBm  1.0000 W
+ * 
+ */
 
 //******************************************************************
 //                      Hardware defines
@@ -299,7 +315,7 @@ void loop()
         synchronizeDateTime(gpsDataObj);
                 
         //next Band to be hopped to
-        whichBand = 28 ;
+        whichBand = 15 ;
     }
     
     // Transmission of a WSPR message every even minute (00:00, 00:02, 00:04, ...)
