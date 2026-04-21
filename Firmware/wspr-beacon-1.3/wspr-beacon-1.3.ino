@@ -11,7 +11,7 @@
 //ERROR CODES
 // TX RED ERROR
 // GPS ERROR            5 TIMES
-// SI535I ERROR         3 TIMES
+// SI5351 ERROR         3 TIMES
 // DATETIME SYNC ERROR 10 TIMES
 
 //******************************************************************
@@ -39,12 +39,14 @@
 // #define WSPR_DEFAULT_FREQ       70092500ULL  // 70.0925 MHz - 4m
 // #define WSPR_DEFAULT_FREQ       144490500ULL // 144.4905 MHz - 2m
 
+#define WSPR_DEFAULT_FREQ_40       7040100ULL   // 7.0401 MHz - 40m
+#define WSPR_DEFAULT_FREQ_20       14097100ULL  // 14.0971 MHz - 20m
 #define WSPR_DEFAULT_FREQ_15       21096100ULL  // 21.0961 MHz - 15m
 #define WSPR_DEFAULT_FREQ_28       28126100ULL  // 28.1261 MHz - 10m
 
 // WSPR message parameters
 #define WSPR_CALL                 "VU3GWN"
-#define WSPR_DBM                   22
+#define WSPR_DBM                   23
 
 /*
  * 
@@ -113,6 +115,20 @@ void synchronizeDateTime(TinyGPSPlus& gpsDataObj);
 void transmitWSPRMessage();
 bool trySyncGPSData(SoftwareSerial& gpsSerial, TinyGPSPlus& gpsDataObj);
 void PowerLEDBlink(int);
+
+#define BAND_40 7
+#define BAND_20 20
+#define BAND_15 15
+#define BAND_10 28
+
+const int bands_night[] = { BAND_40, BAND_20 };
+const int bands_day[] = { BAND_20, BAND_15, BAND_10 };
+const int bands_evening[] = { BAND_40, BAND_20 };
+
+int bandIndex = 0;   // start from 20m (or whatever you want)
+
+unsigned long lastGpsSyncMillis = 0;
+const unsigned long GPS_SYNC_INTERVAL = 600000; // 10 minutes
 
 //******************************************************************
 //                      Function definitions
@@ -209,6 +225,23 @@ void setQTHLocator(const TinyGPSPlus& gpsDataObj, char qthLocator[]) {
     qthLocator[4] = '\0';
 }
 
+void handleGpsSync()
+{
+    unsigned long now = millis();
+
+    if (now - lastGpsSyncMillis >= GPS_SYNC_INTERVAL)
+    {
+        // Avoid syncing during transmission window (first ~2 seconds)
+        if (second() > 2)
+        {
+            TinyGPSPlus gpsDataObj;
+            synchronizeDateTime(gpsDataObj);
+
+            lastGpsSyncMillis = now;
+        }
+    }
+}
+
 void synchronizeDateTime(TinyGPSPlus& gpsDataObj)
 {
     SoftwareSerial gpsSerial{GPS_RX_PIN, GPS_TX_PIN};
@@ -266,18 +299,13 @@ bool trySyncGPSData(SoftwareSerial& gpsSerial, TinyGPSPlus& gpsDataObj)
     return false; 
 }
 
-void setTransmissionFrequency()
-{
-    // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
-    // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
-    transmissionFrequency = (WSPR_DEFAULT_FREQ_15 + random(-100, 101)) * 100ULL;
-}
 
 //******************************************************************
 //                      Main firmware code
 //******************************************************************
 void setup()
 {
+    //Serial.begin(115200) ;
     initializeLEDs();
     initializeSI5351();
 
@@ -291,11 +319,80 @@ void setup()
     randomSeed(millis());
     // Setting the random transmission frequency within the range of +/- 100 Hz from 
     // the center operating frequency
-    setTransmissionFrequency();
+    //setTransmissionFrequency();
 }
 
 
+const int* activeBands;
+int activeBandCount;
+
+void updateBandPlan()
+{
+    int h = hour();  // UTC (assuming your time is synced properly)
+
+    if (h >= 0 && h < 6)
+    {
+        activeBands = bands_night;
+        activeBandCount = sizeof(bands_night) / sizeof(bands_night[0]);
+    }
+    else if (h >= 6 && h < 18)
+    {
+        activeBands = bands_day;
+        activeBandCount = sizeof(bands_day) / sizeof(bands_day[0]);
+    }
+    else
+    {
+        activeBands = bands_evening;
+        activeBandCount = sizeof(bands_evening) / sizeof(bands_evening[0]);
+    }
+}
+
 void loop()
+{
+    static int lastTxMinute = -1;
+    static int bandIndex = 0;
+
+    // Handle GPS sync independently
+    handleGpsSync();
+
+    // WSPR transmission timing
+    if (second() == 0 && (minute() % 2 == 0))
+    {
+        if (minute() == lastTxMinute) return;
+        lastTxMinute = minute();
+
+        updateBandPlan();
+
+        int currentBand = activeBands[bandIndex];
+
+        // Frequency selection
+        if (currentBand == BAND_40)
+            transmissionFrequency = (WSPR_DEFAULT_FREQ_40 + random(-100, 101)) * 100ULL;
+
+        else if (currentBand == BAND_20)
+            transmissionFrequency = (WSPR_DEFAULT_FREQ_20 + random(-100, 101)) * 100ULL;
+
+        else if (currentBand == BAND_15)
+            transmissionFrequency = (WSPR_DEFAULT_FREQ_15 + random(-100, 101)) * 100ULL;
+
+        else if (currentBand == BAND_10)
+            transmissionFrequency = (WSPR_DEFAULT_FREQ_28 + random(-100, 101)) * 100ULL;
+
+        transmitWSPRMessage();
+
+        bandIndex = (bandIndex + 1) % activeBandCount;
+    }
+}
+
+/*
+
+void setTransmissionFrequency()
+{
+    // WSPR message transmission at each transmitWSPRMessage() function call is performed on 
+    // a randomly selected frequency within the range of +/- 100 Hz from the center frequency
+    transmissionFrequency = (WSPR_DEFAULT_FREQ_15 + random(-100, 101)) * 100ULL;
+}
+void loop_old_v1()
 {
   
     // Transmission of a WSPR message every even minute (00:00, 00:02, 00:04, ...)
