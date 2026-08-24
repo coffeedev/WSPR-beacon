@@ -1,4 +1,4 @@
-name: App tests
+name: App build (Windows)
 
 on:
   push:
@@ -18,8 +18,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  app-tests:
-    runs-on: ubuntu-latest
+  app-build-windows:
+    runs-on: windows-latest
 
     steps:
       - name: Check out repository
@@ -36,7 +36,17 @@ jobs:
           pip install -r App/requirements.txt
           pip install -r App/requirements-dev.txt
 
-      - name: Run unit tests
+      - name: Build executable
         run: |
           cd App
-          pytest -m unit -vv
+          pyinstaller --noconsole --onefile `
+            --icon=beaconapp/ui/resources/beacon-app-logo.ico `
+            --add-data "beaconapp/ui/resources/*;ui/resources" `
+            --exclude-module beaconapp.tests `
+            --name BeaconApp beaconapp/main.py
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: beaconapp-windows
+          path: App/dist/BeaconApp.exe

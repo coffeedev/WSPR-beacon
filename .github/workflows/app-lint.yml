@@ -6,29 +6,36 @@ on:
     paths:
       - 'App/**'
   pull_request:
-    branches: [ "master" ]
+    branches: [ "**" ]
     paths:
       - 'App/**'
+  schedule:
+    - cron: '0 0 1 * *'
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   app-lint:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install flake8==7.1.1
+          pip install -r App/requirements-dev.txt
 
       - name: Lint code
         run: |
-          flake8 App --max-line-length 120
+          cd App
+          flake8 .
